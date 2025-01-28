@@ -1,0 +1,116 @@
+#!/bin/bash
+
+#Defines name of file that will hold dns cache
+encrypted_cache_name='dump_cache.bin';
+#Defines name of directory that will hold dns cache
+encrypted_cache_dir='/etc/unbound/';
+#Defines whether pr not dumped unbound cache will be encrypted
+encryption='false';
+
+while getopts 'ed:n:h' OPTION; do
+	case "$OPTION" in
+		e)
+			encryption='true';
+			;;
+		d)
+			encrypted_cache_dir="$OPTARG";
+			if [ ! -d "$encrypted_cache_dir" ];
+			then
+				echo "$encrypted_cache_dir does not exist! Exitting.";
+				exit;
+			fi
+
+			#Checks if there is a forward slash after the directory; adds it if there is not
+			if [ "$(echo "$encrypted_cache_dir" | rev | cut -b1)" != "/" ];
+			then
+				encrypted_cache_dir="$encrypted_cache_dir/";
+			fi
+			;;
+		n)
+			if [ "$encrypted_cache_name" == "" ];
+			then
+				echo "Name cannot be empty! Exitting."
+				exit;
+			fi
+			encrypted_cache_name="$OPTARG";
+			;;
+		h)
+			#Displays help information about different command line arguments
+			echo -e "Flags:\n-e | enables encrypting of dns cache\n-d | directory where encrypted dns cache will be stored\n-n | name of encrypted dns cache file";
+			exit;
+			;;
+		*)
+			#Directs user to "help" command line argument
+			echo "Use -h for flag information."
+			exit;
+			;;
+	esac
+done
+
+if [ "$encryption" == 'true' ];
+then
+	#Asks the user for the password to decrypt the encrypted dns cache
+	read -srp 'enter AES-256-CBC encryption password to encypt/decrypt unbound dns cache:' pass;
+		if [ ! -e "$encrypted_cache_dir""$encrypted_cache_name" ];
+		then
+			echo -en "\nVerifying - enter AES-256-CBC encryption password:";
+			read -sr pass_confirmation;
+		if [ "$pass" != "$pass_confirmation" ];
+		then
+			echo -e "\nPasswords do not match.";
+			exit;
+		fi
+		fi
+	
+	#Checks if an ecrypted dns cache file exists; if not, creates one
+	if [ ! -e "$encrypted_cache_dir""$encrypted_cache_name" ];
+	then
+		temp_dir=$(mktemp -d /tmp/.dump_cache.XXXXXX);
+		temp_file=$(mktemp "$temp_dir"/unbound_cache.XXXXXX);	
+		openssl enc -aes-256-cbc -salt -pbkdf2 -in "$temp_file" -out "$encrypted_cache_dir""$encrypted_cache_name" -pass pass:"$pass"
+		shred -zu "$temp_file";
+		rm -r "$temp_dir"
+	else
+		#Asks user to re-input password if unable to decrypt encrypted dns cache file
+		i=0;
+		error='1'; 
+		while [ "$error" == "1" ];
+		do
+			if [[ "$i" -gt 0 ]] && [[ "$i" -lt 3 ]];
+			then
+				echo -en "\nSorry try again:";
+				read -sr pass;
+			elif [ "$i" -gt 3 ];
+			then
+				echo -e "\n3 incorrect password attempts, exitting...";
+				exit;
+			fi
+			#Attempts to decrypt dns cache file and saves error code to variable
+			#cat "$encrypted_cache_dir""$encrypted_cache_name" | sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -pass pass:"$pass" 2>/dev/null 1>&2;
+			sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -in "$encrypted_cache_dir""$encrypted_cache_name" -pass pass:"$pass" 2>/dev/null 1>&2;	
+			error="$?";
+			i=$(("$i" + 1));
+		done
+			#Load decrypted dns cache file to unbound
+			#cat "$encrypted_cache_dir""$encrypted_cache_name" | sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -pass pass:"$pass" | unbound-control load_cache 2>/dev/null 1>&2;
+			sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -in "$encrypted_cache_dir""$encrypted_cache_name" -pass pass:"$pass" | unbound-control load_cache 2>/dev/null 1>&2;
+			echo -e "\nSucessfull.";
+	fi
+else
+	if [ ! -e "$encrypted_cache_dir""$encrypted_cache_name" ];
+	then
+		temp_dir=$(mktemp -d /tmp/.dump_cache.XXXXXX);
+		temp_file=$(mktemp "$temp_dir"/unbound_cache.XXXXXX);	
+		touch "$encrypted_cache_dir""$encrypted_cache_name";
+		shred -zu "$temp_file";
+		rm -r "$temp_dir"
+	fi
+	unbound-control load_cache "$encrypted_cache_dir""$encrypted_cache_name "2>/dev/null 1>&2;
+	echo -e "\nSucessfull.";
+fi
+
+#Runs dump_unbound_cache and passes the password to it
+bash dump_unbound_cache "$pass" "$encrypted_cache_dir" "$encrypted_cache_name" "$encryption" &
+
+#persistent unbound cache - puc
+#check if works

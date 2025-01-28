@@ -1,0 +1,24 @@
+#!/bin/sh
+
+if [ "$4" = 'true' ];
+then
+	while true;
+	do
+		#Dumps current unbound dns cache, encrypts it with password provided from load_unbound_cache and saves it to the chosen file name
+		unbound-control dump_cache | openssl enc -aes-256-cbc -salt -pbkdf2 -out "$2$3" -pass pass:"$(printf '%s' "$1")";
+		#Saves a copy of the encrypted dns cache to .previous_dump_cache 
+        	cp "$2$3" "$2".previous_dump_cache.bin;
+		#Waits 60 seconds before restarting the loop
+		sleep 60;	
+	done
+else
+	while true;
+	do
+		#Dumps current unbound dns cache, encrypts it with password provided from load_unbound_cache and saves it to the chosen file name
+		unbound-control dump_cache;
+		#Saves a copy of the encrypted dns cache to .previous_dump_cache 
+        	cp "$2$3" "$2".previous_dump_cache.bin;
+		#Waits 60 seconds before restarting the loop
+		sleep 60;	
+	done
+fi
