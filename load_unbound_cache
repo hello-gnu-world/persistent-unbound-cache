@@ -86,13 +86,11 @@ then
 				exit;
 			fi
 			#Attempts to decrypt dns cache file and saves error code to variable
-			#cat "$encrypted_cache_dir""$encrypted_cache_name" | sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -pass pass:"$pass" 2>/dev/null 1>&2;
 			sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -in "$encrypted_cache_dir""$encrypted_cache_name" -pass pass:"$pass" 2>/dev/null 1>&2;	
 			error="$?";
 			i=$(("$i" + 1));
 		done
 			#Load decrypted dns cache file to unbound
-			#cat "$encrypted_cache_dir""$encrypted_cache_name" | sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -pass pass:"$pass" | unbound-control load_cache 2>/dev/null 1>&2;
 			sudo openssl enc -aes-256-cbc -d -salt -pbkdf2 -in "$encrypted_cache_dir""$encrypted_cache_name" -pass pass:"$pass" | unbound-control load_cache 2>/dev/null 1>&2;
 			echo -e "\nSucessfull.";
 	fi
